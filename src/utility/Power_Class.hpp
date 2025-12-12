@@ -208,6 +208,7 @@ namespace m5
 
     AXP2101_Class Axp2101;
     PY32PMIC_Class PY32pmic;
+    INA226_Class Ina226 = { 0x40 };
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C3)
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
@@ -232,7 +233,7 @@ namespace m5
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
-    int16_t _readExtValue(ext_port_mask_t port_mask, int reg_offset);
+    int16_t _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;
     std::uint8_t _wakeupPin = 255;

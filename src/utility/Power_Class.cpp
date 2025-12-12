@@ -216,6 +216,18 @@ namespace m5
     case board_t::board_M5PowerHub:
       M5.In_I2C.writeRegister8(powerhub_i2c_addr, 0x05, 1, i2c_freq); // Enabel VAMeter
       break;
+    
+    case board_t::board_M5StampPLC:
+      Ina226.begin();
+      INA226_Class::config_t cfg;
+      cfg.sampling_rate = INA226_Class::Sampling::Rate16;
+      cfg.bus_conversion_time = INA226_Class::ConversionTime::US_1100;
+      cfg.shunt_conversion_time = INA226_Class::ConversionTime::US_1100;
+      cfg.mode = INA226_Class::Mode::ShuntAndBus;
+      cfg.shunt_res = 0.01f;
+      cfg.max_expected_current = 8.192f;
+      Ina226.config(cfg);
+      break;
     }
 
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
@@ -1569,11 +1581,11 @@ namespace m5
     }
   }
 
-  int16_t Power_Class::_readExtValue(ext_port_mask_t port_mask, int reg_offset)
+  int16_t Power_Class::_readExtValue(ext_port_mask_t port_mask, bool is_voltage)
   {
 #if defined(M5UNIFIED_PC_BUILD)
       (void)port_mask;
-      (void)reg_offset;
+      (void)is_voltage;
 #else
     switch (M5.getBoard()) {
     #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -1593,14 +1605,23 @@ namespace m5
         uint8_t buf[2];
         for (const auto& pr : port_regs) {
           if (port_mask & pr.mask) {
-            if (M5.In_I2C.readRegister(powerhub_i2c_addr, pr.reg + reg_offset, buf, sizeof(buf), i2c_freq)) {
+            if (M5.In_I2C.readRegister(powerhub_i2c_addr, pr.reg + (is_voltage ? 0 : 2), buf, sizeof(buf), i2c_freq)) {
               return (int16_t)((buf[1] << 8) | buf[0]);
             }
               return 0;
           }
         }
         return 0;
-      } break;
+      }
+
+      case board_t::board_M5StampPLC:
+        if (port_mask & (ext_port_mask_t::ext_PWR485 | ext_port_mask_t::ext_PWRCAN)) {
+          if (is_voltage)
+            return Ina226.getBusVoltage() * 1000;
+          else
+            return 0;
+        }
+        return 0;
     #endif
       default:
         return 0;
@@ -1610,12 +1631,12 @@ namespace m5
 
   int16_t Power_Class::getExtVoltage(ext_port_mask_t port_mask)
   {
-    return _readExtValue(port_mask, 0);
+    return _readExtValue(port_mask, true);
   }
 
   int16_t Power_Class::getExtCurrent(ext_port_mask_t port_mask)
   {
-    return _readExtValue(port_mask, 2);
+    return _readExtValue(port_mask, false);
   }
 
   uint8_t Power_Class::getKeyState(void)
