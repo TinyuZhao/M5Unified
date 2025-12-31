@@ -181,11 +181,11 @@ namespace m5
 
     /// Get Ext Port voltage
     /// @return Ext voltage [mV]
-    int16_t getExtVoltage(ext_port_mask_t port_mask);
+    float getExtVoltage(ext_port_mask_t port_mask);
 
     /// get Ext Port current
     /// @return Ext current [mA] ( +=charge / -=discharge )
-    int16_t getExtCurrent(ext_port_mask_t port_mask);
+    float getExtCurrent(ext_port_mask_t port_mask);
 
     /// Get Power Key Press condition.
     /// @return 0=none / 1=long pressed / 2=short clicked / 3=both
@@ -233,7 +233,7 @@ namespace m5
     std::int32_t _getBatteryAdcRaw(void);
     void _powerOff(bool withTimer);
     void _timerSleep(void);
-    int16_t _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
+    float _readExtValue(ext_port_mask_t port_mask, bool is_voltage);
 
     float _adc_ratio = 0;
     std::uint8_t _wakeupPin = 255;
