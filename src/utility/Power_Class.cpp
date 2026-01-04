@@ -35,6 +35,7 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw9523_i2c_addr = 0x58;
   static constexpr uint8_t powerhub_i2c_addr = 0x50;
+  static constexpr uint8_t m5pm1_i2c_addr = 0x6E;
   static constexpr int M5PaperS3_CHG_STAT_PIN = GPIO_NUM_4;
 
 #elif defined (CONFIG_IDF_TARGET_ESP32C6)
@@ -178,8 +179,18 @@ namespace m5
       break;
 
     case board_t::board_M5StickS3:
-      _pmic = Power_Class::pmic_t::pmic_py32pmic;
-      PY32pmic.begin();
+      _pmic = pmic_t::pmic_m5pm1;
+      {
+        // Configure PM1_G0 as input mode for charging status reading
+        // Set pin gpio0 as gpio function: register 0x16 bit 0 (bit off = GPIO function)
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x16, i2c_freq);
+        reg_val &= ~(1 << 0);  // Clear bit 0 (GPIO function)
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x16, reg_val, i2c_freq);
+        // Set pin gpio0 mode: input: register 0x10 bit 0 (bit off = input mode)
+        reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x10, i2c_freq);
+        reg_val &= ~(1 << 0);  // Clear bit 0 (input mode)
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x10, reg_val, i2c_freq);
+      }
       break;
 
     case board_t::board_M5PaperS3:
@@ -566,8 +577,16 @@ namespace m5
       break;
 
     case board_t::board_M5StickS3:
+      if (_pmic == pmic_t::pmic_m5pm1)
       {
-        PY32pmic.setExtOutput(enable);
+        // Control 5V output: register 0x06 bit 3 (1=enable, 0=disable)
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
+        if (enable) {
+          reg_val |= 0x08;  // Set bit 3
+        } else {
+          reg_val &= ~0x08; // Clear bit 3
+        }
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x06, reg_val, i2c_freq);
       }
       break;
 
@@ -650,6 +669,19 @@ namespace m5
 
   bool Power_Class::getExtOutput(void)
   {
+    switch (_pmic)
+    {
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Read 5V output status: register 0x06 bit 3
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
+        return (reg_val & 0x08) != 0;
+      }
+#endif
+    default:
+      break;
+    }
     switch (M5.getBoard())
     {
 #if defined (M5UNIFIED_PC_BUILD)
@@ -909,6 +941,16 @@ namespace m5
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
       case pmic_t::pmic_py32pmic:
         PY32pmic.powerOff();
+        break;
+
+      case pmic_t::pmic_m5pm1:
+        {
+          // Power off: register 0x0C bit 1:0, 01=power off
+          uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x0C, i2c_freq);
+          reg_val &= ~0x03;  // Clear bits 1:0
+          reg_val |= 0x01;   // Set to 01 (power off)
+          M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x0C, reg_val, i2c_freq);
+        }
         break;
 #endif
 
@@ -1218,6 +1260,19 @@ namespace m5
       f = Axp2101.getVBUSVoltage();
       break;
 
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case pmic_t::pmic_m5pm1:
+      {
+        uint8_t buf[2];
+        // Read VBUS voltage from device 0x6E: register 0x24 (VIN_L) and 0x25 (VIN_H)
+        // Unit: mV, format: (VIN_H << 8) | VIN_L
+        if (M5.In_I2C.readRegister(m5pm1_i2c_addr, 0x24, buf, sizeof(buf), i2c_freq)) {
+          f = ((buf[1] << 8) | buf[0]) / 1000.0f; // Convert mV to V
+        }
+      }
+      break;
+#endif
+
 #endif
 
     default:
@@ -1255,6 +1310,19 @@ namespace m5
 
     case pmic_t::pmic_axp2101:
       return Axp2101.getBatteryVoltage() * 1000;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case pmic_t::pmic_m5pm1:
+      {
+        uint8_t buf[2];
+        // Read battery voltage from device 0x6E: register 0x22 (BAT_L) and 0x23 (BAT_H)
+        // Unit: mV, format: (BAT_H << 8) | BAT_L
+        if (M5.In_I2C.readRegister(m5pm1_i2c_addr, 0x22, buf, sizeof(buf), i2c_freq)) {
+          return (buf[1] << 8) | buf[0];
+        }
+        return 0;
+      }
+#endif
 
 #endif
 
@@ -1315,6 +1383,19 @@ namespace m5
       return Axp2101.getBatteryLevel();
       break;
 
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Get battery voltage in mV
+        int16_t bat_mv = getBatteryVoltage();
+        if (bat_mv <= 0) {
+          return -1; // Error reading voltage
+        }
+        mv = bat_mv;
+      }
+      break;
+#endif
+
 #endif
 
     case pmic_t::pmic_adc:
@@ -1373,6 +1454,21 @@ namespace m5
     case pmic_t::pmic_axp2101:
       Axp2101.setBatteryCharge(enable);
       break;
+
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    case pmic_t::pmic_m5pm1:
+      {
+        // Control charge enable: register 0x06 bit 0 (1=enable, 0=disable)
+        uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x06, i2c_freq);
+        if (enable) {
+          reg_val |= 0x01;  // Set bit 0
+        } else {
+          reg_val &= ~0x01; // Clear bit 0
+        }
+        M5.In_I2C.writeRegister8(m5pm1_i2c_addr, 0x06, reg_val, i2c_freq);
+      }
+      return;
+#endif
 
 #endif
 
@@ -1552,6 +1648,14 @@ namespace m5
     default:
       switch (M5.getBoard()) {
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
+      case board_t::board_M5StickS3:
+        {
+          // PM1_G0 is charging status input pin, low=charging / high=not charging
+          uint8_t reg_val = M5.In_I2C.readRegister8(m5pm1_i2c_addr, 0x12, i2c_freq);
+          return (reg_val & 0x01) ? is_charging_t::is_discharging : is_charging_t::is_charging;
+        }
+        break;
+
       case board_t::board_M5PaperS3:
         return (m5gfx::gpio_in(M5PaperS3_CHG_STAT_PIN) == false) ? is_charging_t::is_charging : is_charging_t::is_discharging;
 
@@ -1601,6 +1705,19 @@ namespace m5
         }
         return 0;
       } break;
+
+      case board_t::board_M5StickS3:
+        if (_pmic == pmic_t::pmic_m5pm1 && reg_offset == 0)  // is_voltage when reg_offset is 0
+        {
+          // Read output voltage from device PM1: register 0x26 (5VOUT_L) and 0x27 (5VOUT_H)
+          // Unit: mV, format: (5VOUT_H << 8) | 5VOUT_L
+          uint8_t buf[2];
+          if (M5.In_I2C.readRegister(m5pm1_i2c_addr, 0x26, buf, sizeof(buf), i2c_freq)) {
+            return (int16_t)((buf[1] << 8) | buf[0]);
+          }
+        }
+        return 0;
+
     #endif
       default:
         return 0;

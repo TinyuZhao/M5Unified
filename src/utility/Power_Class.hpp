@@ -77,6 +77,7 @@ namespace m5
     , pmic_axp2101
     , pmic_aw32001
     , pmic_py32pmic
+    , pmic_m5pm1
     };
 
     enum is_charging_t

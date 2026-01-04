@@ -368,6 +368,7 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
   static constexpr uint8_t es8311_i2c_addr1 = 0x19;
   static constexpr uint8_t es8388_i2c_addr = 0x10;
   static constexpr uint8_t pi4io1_i2c_addr = 0x43;
+  static constexpr uint8_t pm1_i2c_addr = 0x6E;
   static constexpr uint8_t py32pmic_i2c_addr = 0x6E;
 #if defined (CONFIG_IDF_TARGET_ESP32S3)
   static constexpr uint8_t aw88298_i2c_addr = 0x36;
@@ -789,6 +790,35 @@ fflush(stdout);
     }
     else
     { m5gfx::gpio_lo(pin_en); }
+    backup_i2c_setting.restore();
+#endif
+    return true;
+  }
+
+  bool M5Unified::_microphone_enabled_cb_sticks3(void* args, bool enabled)
+  {
+    (void)args;
+    (void)enabled;
+#if defined (CONFIG_IDF_TARGET_ESP32S3)
+    static constexpr const uint8_t enabled_bulk_data[] = {
+      2, 0x00, 0x80,  // 0x00 RESET/  CSM POWER ON
+      2, 0x01, 0xBA,  // 0x01 CLOCK_MANAGER/ MCLK=BCLK
+      2, 0x02, 0x18,  // 0x02 CLOCK_MANAGER/ MULT_PRE=3
+      2, 0x0D, 0x01,  // 0x0D SYSTEM/ Power up analog circuitry
+      2, 0x0E, 0x02,  // 0x0E SYSTEM/ : Enable analog PGA, enable ADC modulator
+      2, 0x14, 0x10,  // ES8311_ADC_REG14 : select Mic1p-Mic1n / PGA GAIN (minimum)
+      2, 0x17, 0xFF,  // ES8311_ADC_REG17 : ADC_VOLUME (MAXGAIN) // (0xBF == ± 0 dB )
+      2, 0x1C, 0x6A,  // ES8311_ADC_REG1C : ADC Equalizer bypass, cancel DC offset in digital domain
+      0
+    };
+    static constexpr const uint8_t disabled_bulk_data[] = {
+      2, 0x0D, 0xFC,  // 0x0D SYSTEM/ Power down analog circuitry
+      2, 0x0E, 0x6A,  // 0x0E SYSTEM
+      2, 0x00, 0x00,  // 0x00 RESET/  CSM POWER DOWN
+      0
+    };
+    m5gfx::i2c::i2c_temporary_switcher_t backup_i2c_setting(1, GPIO_NUM_47, GPIO_NUM_48); // sda, scl
+    in_i2c_bulk_write(es8311_i2c_addr0, enabled ? enabled_bulk_data : disabled_bulk_data);
     backup_i2c_setting.restore();
 #endif
     return true;
@@ -1665,6 +1695,11 @@ fflush(stdout);
     case board_t::board_M5StickS3:
       m5gfx::pinMode(GPIO_NUM_11, m5gfx::pin_mode_t::input);
       m5gfx::pinMode(GPIO_NUM_12, m5gfx::pin_mode_t::input);
+      // PA Control Pin Init
+      this->In_I2C.bitOff(pm1_i2c_addr, 0x16, 1 << 3, 100000); // Set pin gpio3 as gpio function
+      this->In_I2C.bitOn(pm1_i2c_addr, 0x10, 1 << 3, 100000);  // Set pin gpio3 mode: output
+      this->In_I2C.bitOff(pm1_i2c_addr, 0x13, 1 << 3, 100000); // Set gpio3 push-pull mode
+      this->In_I2C.bitOff(pm1_i2c_addr, 0x11, 1 << 3, 100000); // Set gpio3 output low
       break;
 
 #endif
@@ -1891,8 +1926,13 @@ fflush(stdout);
           spk_cfg.pin_bck = GPIO_NUM_17;
           spk_cfg.pin_ws = GPIO_NUM_15;
           spk_cfg.pin_data_out = GPIO_NUM_14;
-          spk_cfg.i2s_port = I2S_NUM_1;
-          spk_cfg.magnification = 4;
+          spk_cfg.i2s_port = I2S_NUM_0;
+          spk_cfg.magnification = 1;
+          spk_cfg.sample_rate = 44100;
+          spk_cfg.stereo = true;
+          spk_cfg.buzzer = false;
+          spk_cfg.use_dac = false;
+          spk_cfg.dac_zero_level = 0;
           spk_enable_cb = _speaker_enabled_cb_sticks3;
         }
         break;
