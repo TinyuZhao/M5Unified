@@ -1795,19 +1795,15 @@ namespace m5
         return 0;
       } break;
 
-      case board_t::board_M5StickS3:
-        if (_pmic == pmic_t::pmic_m5pm1 && reg_offset == 0)  // is_voltage when reg_offset is 0
-        {
-          // Read output voltage from device PM1: register 0x26 (5VOUT_L) and 0x27 (5VOUT_H)
-          // Unit: mV, format: (5VOUT_H << 8) | 5VOUT_L
-          uint8_t buf[2];
-          if (M5.In_I2C.readRegister(m5pm1_i2c_addr, 0x26, buf, sizeof(buf), i2c_freq)) {
-            return (int16_t)((buf[1] << 8) | buf[0]);
-          }
+      case board_t::board_M5StickS3: {
+        // Read output voltage from device PM1: register 0x26 (5VOUT_L) and 0x27 (5VOUT_H)
+        // Unit: mV, format: (5VOUT_H << 8) | 5VOUT_L
+        uint8_t buf[2];
+        if (M5.In_I2C.readRegister(m5pm1_i2c_addr, 0x26, buf, sizeof(buf), i2c_freq)) {
+          return (int16_t)((buf[1] << 8) | buf[0]);
         }
         return 0;
-
-      }
+      } break;
 
       case board_t::board_M5StampPLC:
         if (port_mask & (ext_port_mask_t::ext_PWR485 | ext_port_mask_t::ext_PWRCAN)) {
