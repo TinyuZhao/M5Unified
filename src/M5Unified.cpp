@@ -467,16 +467,14 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       };
       if (enabled)
       {
-        self->In_I2C.bitOn(py32pmic_i2c_addr, 0x05, 0b00001000, 100000);
-printf("enabling es8311\n");
-fflush(stdout);
+        self->In_I2C.bitOn(py32pmic_i2c_addr, 0x11, 0b00001000, 100000);
+        ESP_LOGD("M5Unified", "enabling es8311\n");
         in_i2c_bulk_write(es8311_i2c_addr0, enabled_bulk_data, 100000, 3);
       }
       else /// disableにする場合および内蔵スピーカ以外を操作対象とした場合、内蔵スピーカを停止する。
       {
-printf("disabling es8311\n");
-fflush(stdout);
-        self->In_I2C.bitOff(py32pmic_i2c_addr, 0x05, 0b00001000, 100000);
+        ESP_LOGD("M5Unified", "disabling es8311\n");
+        self->In_I2C.bitOff(py32pmic_i2c_addr, 0x11, 0b00001000, 100000);
       }
 //*/
     }
