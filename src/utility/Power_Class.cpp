@@ -231,6 +231,7 @@ namespace m5
       break;
     
     case board_t::board_M5StampPLC:
+      _rtcIntPin = GPIO_NUM_14;
       Ina226.begin();
       INA226_Class::config_t cfg;
       cfg.sampling_rate = INA226_Class::Sampling::Rate16;
@@ -238,7 +239,7 @@ namespace m5
       cfg.shunt_conversion_time = INA226_Class::ConversionTime::US_1100;
       cfg.mode = INA226_Class::Mode::ShuntAndBus;
       cfg.shunt_res = 0.01f;
-      cfg.max_expected_current = 8.192f;
+      cfg.max_expected_current = 2.0f;
       Ina226.config(cfg);
       break;
     }
@@ -246,6 +247,7 @@ namespace m5
 #elif !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32)
 
     /// setup power management ic
+    
     switch (M5.getBoard())
     {
     default:
@@ -1070,6 +1072,17 @@ namespace m5
       break;
     }
 #endif
+#if !defined (CONFIG_IDF_TARGET) || defined (CONFIG_IDF_TARGET_ESP32S3)
+    switch (M5.getBoard())
+    {
+    case board_t::board_M5StampPLC:
+      M5.getIOExpander(0).resetIrq();
+      break;
+
+    default:
+      break;
+    }
+#endif
 #endif
     _powerOff(true);
   }
@@ -1187,6 +1200,7 @@ namespace m5
   void Power_Class::timerSleep( int seconds )
   {
     M5.Rtc.disableIRQ();
+    M5.Rtc.clearIRQ();
     M5.Rtc.setAlarmIRQ(seconds);
 #if !defined (M5UNIFIED_PC_BUILD)
     esp_sleep_enable_timer_wakeup(seconds * 1000000ULL);
@@ -1197,6 +1211,7 @@ namespace m5
   void Power_Class::timerSleep( const rtc_time_t& time)
   {
     M5.Rtc.disableIRQ();
+    M5.Rtc.clearIRQ();
     M5.Rtc.setAlarmIRQ(time);
     _timerSleep();
   }
@@ -1204,6 +1219,7 @@ namespace m5
   void Power_Class::timerSleep( const rtc_date_t& date, const rtc_time_t& time)
   {
     M5.Rtc.disableIRQ();
+    M5.Rtc.clearIRQ();
     M5.Rtc.setAlarmIRQ(date, time);
     _timerSleep();
   }
@@ -1762,7 +1778,7 @@ namespace m5
     }
   }
 
-  int16_t Power_Class::_readExtValue(ext_port_mask_t port_mask, bool is_voltage)
+  float Power_Class::_readExtValue(ext_port_mask_t port_mask, bool is_voltage)
   {
 #if defined(M5UNIFIED_PC_BUILD)
       (void)port_mask;
@@ -1793,7 +1809,7 @@ namespace m5
           }
         }
         return 0;
-      } break;
+      }
 
       case board_t::board_M5StickS3: {
         // Read output voltage from device PM1: register 0x26 (5VOUT_L) and 0x27 (5VOUT_H)
@@ -1810,7 +1826,7 @@ namespace m5
           if (is_voltage)
             return Ina226.getBusVoltage() * 1000;
           else
-            return 0;
+            return Ina226.getShuntCurrent() * 1000;
         }
         return 0;
     #endif
@@ -1820,12 +1836,12 @@ namespace m5
 #endif
   }
 
-  int16_t Power_Class::getExtVoltage(ext_port_mask_t port_mask)
+  float Power_Class::getExtVoltage(ext_port_mask_t port_mask)
   {
     return _readExtValue(port_mask, true);
   }
 
-  int16_t Power_Class::getExtCurrent(ext_port_mask_t port_mask)
+  float Power_Class::getExtCurrent(ext_port_mask_t port_mask)
   {
     return _readExtValue(port_mask, false);
   }
