@@ -1181,12 +1181,12 @@ namespace m5
     }else{
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
     }
-#endif
     esp_light_sleep_start();
     if (M5.getBoard() == board_t::board_M5PaperS3)
     {
       gpio_wakeup_disable((gpio_num_t)wpin);
     }
+#endif
 #endif
   }
 

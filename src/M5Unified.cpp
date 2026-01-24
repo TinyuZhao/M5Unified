@@ -99,8 +99,9 @@ static constexpr const uint8_t _pin_table_i2c_ex_in[][5] = {
 { board_t::board_ArduinoNessoN1,GPIO_NUM_8 ,GPIO_NUM_10 , GPIO_NUM_8 ,GPIO_NUM_10 },
 { board_t::board_unknown      , 255        ,255         , GPIO_NUM_1 ,GPIO_NUM_2  }, // NanoC6
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
-{ board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31, GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
-{ board_t::board_unknown      , 255        ,255         , 255        ,255        },
+{ board_t::board_M5Tab5       , GPIO_NUM_32,GPIO_NUM_31 , GPIO_NUM_54,GPIO_NUM_53 }, // Tab5
+{ board_t::board_M5UnitPoEP4  , GPIO_NUM_1 ,GPIO_NUM_0  , GPIO_NUM_54,GPIO_NUM_53 },
+{ board_t::board_unknown      , 255        ,255         , 255        ,255         },
 #else
 { board_t::board_M5Stack      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_22,GPIO_NUM_21 },
 { board_t::board_M5Paper      , GPIO_NUM_22,GPIO_NUM_21 , GPIO_NUM_32,GPIO_NUM_25 },
@@ -1403,7 +1404,12 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
 #elif defined (CONFIG_IDF_TARGET_ESP32P4)
     if (board == board_t::board_unknown)
     {
-      board = board_t::board_M5Tab5;
+      /// M5Tab5 ?
+      m5gfx::pinMode(GPIO_NUM_32, m5gfx::pin_mode_t::input_pulldown);
+      if (m5gfx::gpio_in(GPIO_NUM_32)) // M5Tab5 G32 always High
+        board = board_t::board_M5Tab5;
+      else
+        board = board_t::board_M5UnitPoEP4;
     }
 
 #endif
@@ -1710,6 +1716,11 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
       this->In_I2C.bitOn(pm1_i2c_addr, 0x10, 1 << 3, 100000);  // Set pin gpio3 mode: output
       this->In_I2C.bitOff(pm1_i2c_addr, 0x13, 1 << 3, 100000); // Set gpio3 push-pull mode
       this->In_I2C.bitOff(pm1_i2c_addr, 0x11, 1 << 3, 100000); // Set gpio3 output low
+      break;
+
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+    case board_t::board_M5UnitPoEP4:
+      m5gfx::pinMode(GPIO_NUM_45, m5gfx::pin_mode_t::input);
       break;
 
 #endif
@@ -2573,6 +2584,18 @@ static constexpr const uint8_t _pin_table_mbus[][31] = {
                           | (!(value & 0b010) ? 0b00010 : 0) // BtnB
                           ;
       }
+      break;
+
+    default:
+      break;
+    }
+#elif defined (CONFIG_IDF_TARGET_ESP32P4)
+
+    switch (_board)
+    {
+    case board_t::board_M5UnitPoEP4:
+      use_rawstate_bits = 0b00001;
+      btn_rawstate_bits = (!m5gfx::gpio_in(GPIO_NUM_45)) & 1;
       break;
 
     default:
